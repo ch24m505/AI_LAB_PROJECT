@@ -1,0 +1,72 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib60/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# DVC files
+# Ignore the DVC cache and temporary files
+# Your Git repo should only contain the small .dvc pointer files
+.dvc/cache
+.dvc/tmp
+.dvc/lock
+
+# MLflow files
+# Ignore local experiment tracking data
+mlruns/
+.mlflow-props
+
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE and editor configuration files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Notebook checkpoints
+.ipynb_checkpoints
+
+# Locally stored data files (that should be tracked by DVC instead)
+# This prevents accidentally committing them to Git
+data/
+*.csv
+*.parquet
+*.json
