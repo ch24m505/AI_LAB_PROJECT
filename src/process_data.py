@@ -1,28 +1,84 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[2]:
+# In[1]:
 
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, mean, count
+from pyspark.ml.feature import StringIndexer, OneHotEncoder, VectorAssembler
+from pyspark.ml import Pipeline
+from pyspark.sql.functions import col, when, mean, mode
 
-def process_data():
+def create_preprocessing_pipeline(df):
     """
-    This function loads the raw Titanic dataset, performs all the necessary
-    preprocessing and feature engineering, and saves the cleaned dataset.
+    Creates a PySpark ML Pipeline for preprocessing the Titanic dataset.
+
+    Args:
+        df: The raw Spark DataFrame.
+
+    Returns:
+        A PySpark ML Pipeline model.
     """
-    # 1. Initialize Spark Session
-    # This is the entry point to any Spark functionality.
+
+    # 1. Handle Missing Values
+    # Impute missing 'Age' with the mean.
+    mean_age = df.agg(mean(col('Age'))).collect()[0][0]
+
+    # Impute missing 'Embarked' with the mode.
+    mode_embarked = df.groupBy('Embarked').count().orderBy(col('count').desc()).first()[0]
+
+    # Impute missing 'Fare' with the mean.
+    mean_fare = df.agg(mean(col('Fare'))).collect()[0][0]
+
+    # Use a custom transformer or direct operations for imputation.
+    # For this example, we'll apply these operations before the pipeline.
+    # In a real-world scenario, you might use a custom Transformer.
+    df = df.fillna(mean_age, subset=['Age'])
+    df = df.fillna(mode_embarked, subset=['Embarked'])
+    df = df.fillna(mean_fare, subset=['Fare'])
+
+    # 2. Feature Engineering
+    df = df.withColumn('FamilySize', col('SibSp') + col('Parch') + 1)
+    df = df.withColumn('IsAlone', when(col('FamilySize') == 1, 1).otherwise(0))
+
+    # 3. Define Categorical and Numerical Columns
+    categorical_cols = ['Pclass', 'Sex', 'Embarked']
+    numerical_cols = ['Age', 'Fare', 'FamilySize', 'IsAlone']
+
+    # 4. Create Pipeline Stages
+
+    # Index all categorical columns
+    indexers = [
+        StringIndexer(inputCol=c, outputCol=f"{c}_index", handleInvalid='keep')
+        for c in categorical_cols
+    ]
+
+    # One-hot encode the indexed columns
+    encoders = [
+        OneHotEncoder(inputCol=f"{c}_index", outputCol=f"{c}_vector")
+        for c in categorical_cols
+    ]
+
+    # Final list of all features to be assembled
+    feature_columns = numerical_cols + [f"{c}_vector" for c in categorical_cols]
+
+    # Assemble all features into a single vector
+    assembler = VectorAssembler(inputCols=feature_columns, outputCol="features")
+
+    # 5. Create the Pipeline
+    pipeline = Pipeline(stages=indexers + encoders + [assembler])
+
+    return pipeline, df
+
+
+def process_and_save_data():
+    """
+    Main function to run the data processing pipeline.
+    """
     spark = SparkSession.builder \
-        .appName("TitanicDataProcessing") \
+        .appName("TitanicMLPreprocessing") \
         .getOrCreate()
-    print("Spark session initialized.")
 
-    # 2. Load the Raw Data
-    # Reading the training data from the 'data/raw' directory.
-    # 'header=True' treats the first row as column names.
-    # 'inferSchema=True' automatically detects column data types.
     try:
         df = spark.read.csv('../data/raw/train.csv', header=True, inferSchema=True)
         print("Raw training data loaded successfully.")
@@ -31,73 +87,31 @@ def process_data():
         spark.stop()
         return
 
-    # 3. Data Cleaning and Feature Engineering
+    # Create and fit the pipeline
+    pipeline, df_imputed = create_preprocessing_pipeline(df)
+    pipeline_model = pipeline.fit(df_imputed)
 
-    # --- Handle Missing Values ---
+    # Transform the data using the fitted pipeline model
+    processed_df = pipeline_model.transform(df_imputed)
 
-    # Fill missing 'Age' values with the mean age of the dataset.
-    mean_age = df.select(mean(col('Age'))).collect()[0][0]
-    df = df.fillna(mean_age, subset=['Age'])
-    print(f"Missing 'Age' values filled with mean age: {mean_age:.2f}")
+    # Select the final columns: 'Survived' and the 'features' vector
+    final_df = processed_df.select('Survived', 'features')
 
-    # Fill missing 'Embarked' values with the most frequent value ('S').
-    # In a more advanced pipeline, you would calculate this dynamically.
-    df = df.fillna('S', subset=['Embarked'])
-    print("Missing 'Embarked' values filled with 'S'.")
-
-    # --- Create New Features ---
-
-    # Create 'FamilySize' from 'SibSp' (siblings/spouses) and 'Parch' (parents/children).
-    df = df.withColumn('FamilySize', col('SibSp') + col('Parch') + 1)
-    print("Created 'FamilySize' feature.")
-
-    # --- Convert Categorical Features to Numerical ---
-
-    # Convert 'Sex' to a binary numeric column: male=1, female=0.
-    df = df.withColumn('Sex_numeric', when(col('Sex') == 'male', 1).otherwise(0))
-    print("Converted 'Sex' to numeric format.")
-
-    # Convert 'Embarked' to numerical format using one-hot encoding principles.
-    df = df.withColumn('Embarked_S', when(col('Embarked') == 'S', 1).otherwise(0))
-    df = df.withColumn('Embarked_C', when(col('Embarked') == 'C', 1).otherwise(0))
-    df = df.withColumn('Embarked_Q', when(col('Embarked') == 'Q', 1).otherwise(0))
-    print("Converted 'Embarked' to numeric format.")
-
-    # --- Select and Drop Columns ---
-
-    # Select the columns useful for machine learning and drop the original/unneeded ones.
-    final_df = df.select(
-        'Survived',
-        'Pclass',
-        'Age',
-        'FamilySize',
-        'Fare',
-        'Sex_numeric',
-        'Embarked_S',
-        'Embarked_C',
-        'Embarked_Q'
-    )
-
-    print("Final features selected.")
+    print("Pipeline successfully transformed data.")
     final_df.printSchema()
-    final_df.show(10)
+    final_df.show(5, truncate=False)
 
-    # 4. Save the Processed Data
-    # Saving the final DataFrame in Parquet format for efficient storage and retrieval.
-    # 'mode('overwrite')' allows the script to be re-run without errors.
     try:
-        final_df.write.mode('overwrite').parquet('../data/processed/titanic_processed')
-        print("Processed data successfully saved to 'data/processed/titanic_processed'.")
+        # Save the processed DataFrame. This can now be used for model training.
+        final_df.write.mode('overwrite').parquet('../data/processed/titanic_ml_ready')
+        print("Processed data saved to 'data/processed/titanic_ml_ready'.")
     except Exception as e:
         print(f"Error saving processed data: {e}")
 
-    # 5. Stop the Spark Session
-    # It's important to stop the session to free up resources.
     spark.stop()
-    print("Spark session stopped.")
 
 if __name__ == '__main__':
-    process_data()
+    process_and_save_data()
 
 
 # In[ ]:
