@@ -70,3 +70,4 @@ data/
 *.csv
 *.parquet
 *.json
+/data
