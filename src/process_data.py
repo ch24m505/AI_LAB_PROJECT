@@ -103,7 +103,7 @@ def process_and_save_data():
 
     try:
         # Save the processed DataFrame. This can now be used for model training.
-        final_df.write.mode('overwrite').parquet('../data/processed/titanic_ml_ready')
+        final_df.write.mode('overwrite').parquet('data/processed/titanic_ml_ready')
         print("Processed data saved to 'data/processed/titanic_ml_ready'.")
     except Exception as e:
         print(f"Error saving processed data: {e}")

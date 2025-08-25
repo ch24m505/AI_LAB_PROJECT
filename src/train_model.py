@@ -1,205 +1,154 @@
-#!/usr/bin/env python
-# coding: utf-8
 import argparse
+import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import (DecisionTreeClassifier,
+                                       GBTClassifier, LogisticRegression,
+                                       RandomForestClassifier)
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+from pyspark.sql import SparkSession
+from sklearn.metrics import confusion_matrix
+
 import mlflow
 import mlflow.spark
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-from pyspark.sql import SparkSession
-from pyspark.ml import Pipeline
-from pyspark.ml.classification import (
-    LogisticRegression,
-    RandomForestClassifier,
-    DecisionTreeClassifier,
-)
-from pyspark.ml.evaluation import (
-    BinaryClassificationEvaluator,
-    MulticlassClassificationEvaluator,
-)
-from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
-from mlflow.tracking import MlflowClient
 
 
-def promote_best_model(model_name, metric_name, current_run_id):
-    """
-    Compares the current model with the production model and promotes it
-    if it performs better.
-    """
-    client = MlflowClient()
-    current_run = client.get_run(current_run_id)
-    current_metric = current_run.data.metrics.get(metric_name)
+def plot_confusion_matrix(y_true, y_pred, model_name):
+    """Plots and saves a confusion matrix."""
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(6, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['Not Survived', 'Survived'],
+                yticklabels=['Not Survived', 'Survived'])
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    plt.title(f'Confusion Matrix - {model_name}')
+    
+    # Save the plot to a file
+    plot_path = f"confusion_matrix_{model_name}.png"
+    plt.savefig(plot_path)
+    plt.close()
+    return plot_path
 
-    if current_metric is None:
-        print(f"Metric '{metric_name}' not found for current run. Skipping promotion.")
-        return
 
-    production_metric = -1
+def main(model_name):
+    """Main function for training and evaluating a model."""
+    spark = SparkSession.builder \
+        .appName("TitanicMLOps") \
+        .getOrCreate()
 
-    try:
-        versions = client.get_latest_versions(model_name, stages=["Production"])
-        if versions:
-            production_version = versions[0]
-            production_run = client.get_run(production_version.run_id)
-            production_metric = production_run.data.metrics.get(metric_name, -1)
-    except mlflow.exceptions.RestException:
-        print(f"Model '{model_name}' not found. Registering new model.")
+    # --- Load Data ---
+    processed_df = spark.read.parquet("data/processed/titanic_ml_ready")
+    train_df, test_df = processed_df.randomSplit([0.8, 0.2], seed=42)
 
-    print(
-        f"Current model metric: {current_metric:.4f}, "
-        f"Production model metric: {production_metric:.4f}"
-    )
+    # --- MLflow Setup ---
+    mlflow.set_experiment("Titanic Survival Prediction")
 
-    if current_metric > production_metric:
-        print("New model is better! Promoting to Production.")
-        latest_version = client.get_latest_versions(model_name, stages=["None"])[0]
-        client.transition_model_version_stage(
-            name=model_name,
-            version=latest_version.version,
-            stage="Production",
-            archive_existing_versions=True,
-        )
+    # --- Model Selection and Hyperparameter Grid ---
+    if model_name == 'lr':
+        lr = LogisticRegression(featuresCol='features', labelCol='Survived')
+        paramGrid = (ParamGridBuilder()
+                     .addGrid(lr.regParam, [0.01, 0.1, 0.5])
+                     .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0])
+                     .build())
+        model = lr
+        mlflow_run_name = "lr_hyperparam_tuning"
+        model_registry_name = "TitanicClassifier_lr"
+
+    elif model_name == 'dt':
+        dt = DecisionTreeClassifier(featuresCol='features', labelCol='Survived')
+        paramGrid = (ParamGridBuilder()
+                     .addGrid(dt.maxDepth, [3, 5, 7])
+                     .addGrid(dt.maxBins, [32, 50])
+                     .build())
+        model = dt
+        mlflow_run_name = "dt_hyperparam_tuning"
+        model_registry_name = "TitanicClassifier_dt"
+
+    elif model_name == 'rf':
+        rf = RandomForestClassifier(featuresCol='features', labelCol='Survived')
+        paramGrid = (ParamGridBuilder()
+                     .addGrid(rf.numTrees, [50, 100, 150])
+                     .addGrid(rf.maxDepth, [5, 8, 10])
+                     .addGrid(rf.maxBins, [32, 50])
+                     .build())
+        model = rf
+        mlflow_run_name = "rf_hyperparam_tuning"
+        model_registry_name = "TitanicClassifier_rf"
+    
+    # --- NEW: GBT Classifier ---
+    elif model_name == 'gbt':
+        gbt = GBTClassifier(featuresCol='features', labelCol='Survived')
+        paramGrid = (ParamGridBuilder()
+                     .addGrid(gbt.maxIter, [10, 20, 30])
+                     .addGrid(gbt.maxDepth, [3, 5])
+                     .build())
+        model = gbt
+        mlflow_run_name = "gbt_hyperparam_tuning"
+        model_registry_name = "TitanicClassifier_gbt"
+
     else:
-        print("Current model is not better than the production model.")
+        raise ValueError("Invalid model_name. Choose from 'lr', 'dt', 'rf', 'gbt'.")
 
+    # --- Start MLflow Run ---
+    with mlflow.start_run(run_name=mlflow_run_name) as run:
+        # --- Cross-Validation and Training ---
+        evaluator = BinaryClassificationEvaluator(labelCol="Survived")
+        
+        cv = CrossValidator(estimator=model,
+                            estimatorParamMaps=paramGrid,
+                            evaluator=evaluator,
+                            numFolds=5)
 
-def train_model(model_name: str):
-    """
-    Loads ML-ready data, trains a selected model with hyperparameter tuning,
-    and logs everything with MLflow.
-    """
-    mlflow.set_tracking_uri("http://127.0.0.1:5000")
+        cv_model = cv.fit(train_df)
+        best_model = cv_model.bestModel
 
-    with mlflow.start_run(run_name=f"{model_name}_tuning_run") as run:
-        spark = SparkSession.builder.appName("TitanicModelTraining").getOrCreate()
-        ml_ready_df = spark.read.parquet(
-            "C:/Users/user/AI_LAB_PROJECT/data/processed/titanic_ml_ready"
-        )
-        train_data, test_data = ml_ready_df.randomSplit([0.8, 0.2], seed=42)
+        # --- Evaluation ---
+        predictions = best_model.transform(test_df)
+        test_auc = evaluator.evaluate(predictions, {evaluator.metricName: "areaUnderROC"})
+        
+        # Calculate accuracy manually for logging
+        correct_predictions = predictions.filter(predictions.Survived == predictions.prediction).count()
+        total_data = predictions.count()
+        test_accuracy = correct_predictions / total_data
 
+        print(f"Model: {model_name.upper()}")
+        print(f"Test Accuracy: {test_accuracy:.4f}")
+        print(f"Test AUC: {test_auc:.4f}")
+
+        # --- Logging to MLflow ---
         mlflow.log_param("model_type", model_name)
-        evaluator_auc = BinaryClassificationEvaluator(labelCol="Survived")
+        
+        # Log best hyperparameters
+        best_params = best_model.extractParamMap()
+        for param, value in best_params.items():
+            if any(p.name == param.name for p in paramGrid[0]):
+                mlflow.log_param(param.name, value)
+        
+        mlflow.log_metric("test_auc", test_auc)
+        mlflow.log_metric("test_accuracy", test_accuracy)
+        
+        # Log confusion matrix artifact
+        preds_for_cm = predictions.select("Survived", "prediction").toPandas()
+        cm_path = plot_confusion_matrix(preds_for_cm["Survived"], preds_for_cm["prediction"], model_name)
+        mlflow.log_artifact(cm_path, "plots")
+        os.remove(cm_path)
 
-        if model_name == "lr":
-            lr = LogisticRegression(featuresCol="features", labelCol="Survived")
-            paramGrid = (
-                ParamGridBuilder()
-                .addGrid(lr.regParam, [0.01, 0.1, 0.5])
-                .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0])
-                .build()
-            )
-            cv = CrossValidator(
-                estimator=lr,
-                estimatorParamMaps=paramGrid,
-                evaluator=evaluator_auc,
-                numFolds=3,
-            )
-            print("Starting hyperparameter tuning for Logistic Regression...")
-            cvModel = cv.fit(train_data)
-            model = cvModel.bestModel
-            best_params = model.extractParamMap()
-            mlflow.log_param("best_regParam", best_params[lr.regParam])
-            mlflow.log_param("best_elasticNetParam", best_params[lr.elasticNetParam])
-
-        elif model_name == "rf":
-            rf = RandomForestClassifier(featuresCol="features", labelCol="Survived")
-            paramGrid = (
-                ParamGridBuilder()
-                .addGrid(rf.numTrees, [50, 100, 150])
-                .addGrid(rf.maxDepth, [5, 10, 15])
-                .build()
-            )
-            cv = CrossValidator(
-                estimator=rf,
-                estimatorParamMaps=paramGrid,
-                evaluator=evaluator_auc,
-                numFolds=3,
-            )
-            print("Starting hyperparameter tuning for Random Forest...")
-            cvModel = cv.fit(train_data)
-            model = cvModel.bestModel
-            best_params = model.extractParamMap()
-            mlflow.log_param("best_num_trees", best_params[rf.numTrees])
-            mlflow.log_param("best_max_depth", best_params[rf.maxDepth])
-
-        elif model_name == "dt":
-            dt = DecisionTreeClassifier(featuresCol="features", labelCol="Survived")
-            paramGrid = (
-                ParamGridBuilder()
-                .addGrid(dt.maxDepth, [5, 10, 15])
-                .addGrid(dt.maxBins, [32, 48])
-                .build()
-            )
-            cv = CrossValidator(
-                estimator=dt,
-                estimatorParamMaps=paramGrid,
-                evaluator=evaluator_auc,
-                numFolds=3,
-            )
-            print("Starting hyperparameter tuning for Decision Tree...")
-            cvModel = cv.fit(train_data)
-            model = cvModel.bestModel
-            best_params = model.extractParamMap()
-            mlflow.log_param("best_maxDepth", best_params[dt.maxDepth])
-            mlflow.log_param("best_maxBins", best_params[dt.maxBins])
-
-        else:
-            spark.stop()
-            raise ValueError("Unsupported model type specified.")
-
-        print(f"Model training complete for {model_name}.")
-
-        # --- Evaluation and Artifact Logging ---
-        predictions = model.transform(test_data)
-        auc = evaluator_auc.evaluate(predictions)
-        mlflow.log_metric("test_auc", auc)
-        print(f"AUC for {model_name}: {auc}")
-
-        evaluator_acc = MulticlassClassificationEvaluator(
-            labelCol="Survived", metricName="accuracy"
-        )
-        accuracy = evaluator_acc.evaluate(predictions)
-        mlflow.log_metric("test_accuracy", accuracy)
-        print(f"Accuracy on test data: {accuracy}")
-
-        # --- Log Confusion Matrix ---
-        preds_and_labels = predictions.select("prediction", "Survived").toPandas()
-        confusion_matrix = pd.crosstab(
-            preds_and_labels["Survived"], preds_and_labels["prediction"]
-        )
-        plt.figure(figsize=(6, 5))
-        sns.heatmap(confusion_matrix, annot=True, fmt="d")
-        plt.title("Confusion Matrix")
-        plt.ylabel("Actual")
-        plt.xlabel("Predicted")
-        plt.savefig("confusion_matrix.png")
-        mlflow.log_artifact("confusion_matrix.png", "plots")
-        print("Confusion matrix plot logged as an artifact.")
-
-        # --- Log Model without Signature ---
-        registered_model_name = f"TitanicClassifier_{model_name}"
+        # Log and register the model
         mlflow.spark.log_model(
-            model,
-            "spark-model",
-            registered_model_name=registered_model_name,
+            spark_model=best_model,
+            artifact_path="model",
+            registered_model_name=model_registry_name
         )
-        print(f"Model logged and registered as '{registered_model_name}'.")
 
-        spark.stop()
-
-        # --- Promote Best Model ---
-        promote_best_model(registered_model_name, "test_auc", run.info.run_id)
-
+    spark.stop()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_name",
-        type=str,
-        default="lr",
-        choices=["lr", "rf", "dt"],
-        help="Specify the model to train: lr, rf, or dt.",
-    )
+    parser.add_argument("--model_name", type=str, default="rf",
+                        choices=["lr", "dt", "rf", "gbt"],
+                        help="Choose the model to train.")
     args = parser.parse_args()
-    train_model(model_name=args.model_name)
+    main(args.model_name)
