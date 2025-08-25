@@ -80,7 +80,7 @@ def process_and_save_data():
         .getOrCreate()
 
     try:
-        df = spark.read.csv('C:/Users/user/AI_LAB_PROJECT/data/raw/train.csv', header=True, inferSchema=True)
+        df = spark.read.csv('raw_dataset/train.csv', header=True, inferSchema=True)
         print("Raw training data loaded successfully.")
     except Exception as e:
         print(f"Error loading data: {e}")
