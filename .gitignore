@@ -66,3 +66,6 @@ Thumbs.db
 # Generated artifacts from runs
 *.png
 /raw_dataset
+# DVC tracked data
+/data
+
