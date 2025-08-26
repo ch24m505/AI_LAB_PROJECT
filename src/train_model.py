@@ -13,6 +13,7 @@ from pyspark.ml.classification import (
     LogisticRegression,
     RandomForestClassifier,
     DecisionTreeClassifier,
+    GBTClassifier,  # Added GBTClassifier
 )
 from pyspark.ml.evaluation import (
     BinaryClassificationEvaluator,
@@ -73,9 +74,8 @@ def train_model(model_name: str):
 
     with mlflow.start_run(run_name=f"{model_name}_tuning_run") as run:
         spark = SparkSession.builder.appName("TitanicModelTraining").getOrCreate()
-        ml_ready_df = spark.read.parquet(
-            "C:/Users/user/AI_LAB_PROJECT/data/processed/titanic_ml_ready"
-        )
+        # NOTE: Using a relative path is generally better practice
+        ml_ready_df = spark.read.parquet("./data/processed/titanic_ml_ready")
         train_data, test_data = ml_ready_df.randomSplit([0.8, 0.2], seed=42)
 
         mlflow.log_param("model_type", model_name)
@@ -143,6 +143,28 @@ def train_model(model_name: str):
             best_params = model.extractParamMap()
             mlflow.log_param("best_maxDepth", best_params[dt.maxDepth])
             mlflow.log_param("best_maxBins", best_params[dt.maxBins])
+        
+        # --- NEW GBT CLASSIFIER BLOCK ---
+        elif model_name == "gbt":
+            gbt = GBTClassifier(featuresCol="features", labelCol="Survived")
+            paramGrid = (
+                ParamGridBuilder()
+                .addGrid(gbt.maxIter, [10, 20])
+                .addGrid(gbt.maxDepth, [3, 5])
+                .build()
+            )
+            cv = CrossValidator(
+                estimator=gbt,
+                estimatorParamMaps=paramGrid,
+                evaluator=evaluator_auc,
+                numFolds=3,
+            )
+            print("Starting hyperparameter tuning for GBT Classifier...")
+            cvModel = cv.fit(train_data)
+            model = cvModel.bestModel
+            best_params = model.extractParamMap()
+            mlflow.log_param("best_max_iter", best_params[gbt.maxIter])
+            mlflow.log_param("best_max_depth", best_params[gbt.maxDepth])
 
         else:
             spark.stop()
@@ -198,8 +220,8 @@ if __name__ == "__main__":
         "--model_name",
         type=str,
         default="lr",
-        choices=["lr", "rf", "dt"],
-        help="Specify the model to train: lr, rf, or dt.",
+        choices=["lr", "rf", "dt", "gbt"],  # Added 'gbt'
+        help="Specify the model to train: lr, rf, dt, or gbt.",
     )
     args = parser.parse_args()
     train_model(model_name=args.model_name)
