@@ -1,0 +1,11 @@
+# Core libraries for data processing and modeling with Spark
+pyspark==4.0.0
+mlflow==3.3.1
+
+# Libraries for the API server
+fastapi==0.116.1
+uvicorn==0.35.0
+pandas==2.3.2
+
+# Library for data versioning
+dvc==3.62.0
