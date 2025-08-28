@@ -1,4 +1,4 @@
-============================================== MLOps Pipeline for Titanic Survival Prediction
+=========================== MLOps Pipeline for Titanic Survival Prediction===================
 This project implements a robust, end-to-end MLOps pipeline for a classification task using the Kaggle Titanic dataset. The pipeline is built with a modular, multi-stage architecture using DVC and leverages SparkML for distributed processing and training, MLflow for experiment tracking, and Docker for containerized deployment.
 
 Technologies Used
@@ -80,4 +80,5 @@ Project Structure
 ├── .gitignore
 ├── dvc.yaml              (DVC pipeline definition)
 ├── Dockerfile            (Docker instructions for the API)
+
 └── requirements.txt      (Project dependencies)
