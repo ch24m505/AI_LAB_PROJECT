@@ -1,14 +1,12 @@
-# Core ML and Data Libraries
+# Core libraries for data processing and modeling with Spark
 pyspark==4.0.0
 mlflow==3.3.1
-pandas==2.3.2
-scikit-learn==1.7.1
-seaborn==0.13.2
 
-# API and Server Libraries
+# Libraries for the API server and testing
 fastapi==0.116.1
 uvicorn==0.35.0
-python-multipart==0.0.20
+pandas==2.3.2
+requests==2.31.0
 
-# DVC - For reproducibility
+# Library for data versioning
 dvc==3.62.0

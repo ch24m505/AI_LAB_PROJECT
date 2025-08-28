@@ -1,0 +1,33 @@
+stages:
+  prepare_data:
+    cmd: python3 src/prepare_data.py
+    deps:
+    - raw_dataset
+    - src/prepare_data.py
+    outs:
+    - data/prepared
+  preprocess:
+    cmd: python3 src/preprocess.py
+    deps:
+    - data/prepared/train.parquet
+    - src/preprocess.py
+    outs:
+    - models/preprocessor
+  train:
+    cmd: python3 src/train.py
+    deps:
+    - data/prepared/train.parquet
+    - models/preprocessor
+    - src/train.py
+    outs:
+    - models/classifier
+  evaluate:
+    cmd: python3 src/evaluate.py
+    deps:
+    - data/prepared/test.parquet
+    - models/classifier
+    - models/preprocessor
+    - src/evaluate.py
+    metrics:
+    - metrics/scores.json:
+        cache: false

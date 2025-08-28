@@ -4,17 +4,18 @@ FROM python:3.12-slim
 # 2. Set the working directory inside the container
 WORKDIR /app
 
-# 3. Install the default Java (JDK), which is required by PySpark
+# 3. Install Java (JDK), which is required by PySpark
 RUN apt-get update && apt-get install -y default-jdk
 
-# 4. Copy the requirements file into the container
+# 4. Copy your new, clean requirements file
 COPY requirements.txt .
 
-# 5. Install the Python dependencies
+# 5. Install the Python dependencies from the file
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 6. Copy your application code into the container
+# 6. Copy your application code and the trained model artifacts
 COPY ./src ./src
+COPY ./models ./models
 
 # 7. Expose the port the API will run on
 EXPOSE 8000

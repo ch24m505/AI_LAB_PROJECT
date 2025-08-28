@@ -1,0 +1,88 @@
+schema: '2.0'
+stages:
+  prepare_data:
+    cmd: python3 src/prepare_data.py
+    deps:
+    - path: raw_dataset
+      hash: md5
+      md5: c5f612fdfe06b317e4101c4b035c692c.dir
+      size: 89823
+      nfiles: 2
+    - path: src/prepare_data.py
+      hash: md5
+      md5: 7bdeb36dd9d73495ac799d6069cdf17e
+      size: 1166
+    outs:
+    - path: data/prepared
+      hash: md5
+      md5: 8cbd60e5f1da6a2c579546dc763693c2.dir
+      size: 41975
+      nfiles: 8
+  preprocess:
+    cmd: python3 src/preprocess.py
+    deps:
+    - path: data/prepared/train.parquet
+      hash: md5
+      md5: 9fa0a9e5b9dd1a5670e0a330ea7bc56d.dir
+      size: 31717
+      nfiles: 4
+    - path: src/preprocess.py
+      hash: md5
+      md5: a89a5d4a83266129d024dc408afbf43a
+      size: 2131
+    outs:
+    - path: models/preprocessor
+      hash: md5
+      md5: 078f72bc67c7e07a333f0b088d5aaaa7.dir
+      size: 8804
+      nfiles: 72
+  train:
+    cmd: python3 src/train.py
+    deps:
+    - path: data/prepared/train.parquet
+      hash: md5
+      md5: 9fa0a9e5b9dd1a5670e0a330ea7bc56d.dir
+      size: 31717
+      nfiles: 4
+    - path: models/preprocessor
+      hash: md5
+      md5: 078f72bc67c7e07a333f0b088d5aaaa7.dir
+      size: 8804
+      nfiles: 72
+    - path: src/train.py
+      hash: md5
+      md5: 911fb07f392d3b69431501a76b58d3b2
+      size: 4781
+    outs:
+    - path: models/classifier
+      hash: md5
+      md5: 98df5f2999176c5122eb4e99ccc4160a.dir
+      size: 153746
+      nfiles: 12
+  evaluate:
+    cmd: python3 src/evaluate.py
+    deps:
+    - path: data/prepared/test.parquet
+      hash: md5
+      md5: c975a4994c1385238e1ab60be43a9d03.dir
+      size: 10258
+      nfiles: 4
+    - path: models/classifier
+      hash: md5
+      md5: 98df5f2999176c5122eb4e99ccc4160a.dir
+      size: 153746
+      nfiles: 12
+    - path: models/preprocessor
+      hash: md5
+      md5: 078f72bc67c7e07a333f0b088d5aaaa7.dir
+      size: 8804
+      nfiles: 72
+    - path: src/evaluate.py
+      hash: md5
+      md5: 0999d2922539b8b787bc38d07af6d336
+      size: 2247
+    outs:
+    - path: metrics/scores.json
+      hash: md5
+      md5: cb7f895e4b5f6642ccb80491a0137974
+      size: 90

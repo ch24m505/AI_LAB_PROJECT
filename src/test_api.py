@@ -1,34 +1,33 @@
+# src/test_api.py
 import requests
 import json
 
-# The URL of your local API endpoint
+# The URL of your API running in the Docker container
 URL = "http://127.0.0.1:8000/predict"
 
-# Sample passenger data that matches the Pydantic schema in app.py
-# This represents a 25-year-old male from Southampton in 3rd class
+# Sample passenger data (a 1st class female who should survive)
 passenger_data = {
-    "Pclass": 3,
-    "Sex": "male",
-    "Age": 25.0,
-    "SibSp": 0,
+    "Pclass": 1,
+    "Sex": "female",
+    "Age": 38.0,
+    "SibSp": 1,
     "Parch": 0,
-    "Fare": 7.25,
-    "Embarked": "S",
-    "FamilySize": 1,
-    "IsAlone": 1,
-    "Title": "Mr"
+    "Fare": 71.2833,
+    "Embarked": "C"
 }
 
-# Send a POST request to the API
+print("Sending request to the API...")
 try:
+    # Send the request
     response = requests.post(URL, data=json.dumps(passenger_data))
-    response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
-    
-    # Print the server's response
-    print("API Request Sent Successfully!")
-    print(f"Passenger Data Sent: {passenger_data}")
+    response.raise_for_status()  # This will raise an error for bad responses (4xx or 5xx)
+
+    # Print the successful response from the server
+    print("Request successful!")
     print("-" * 30)
-    print(f"API Response: {response.json()}")
+    print(f"Data Sent: {passenger_data}")
+    print(f"Prediction Received: {response.json()}")
+    print("-" * 30)
 
 except requests.exceptions.RequestException as e:
-    print(f"An error occurred while calling the API: {e}")
+    print(f"An error occurred: {e}")
