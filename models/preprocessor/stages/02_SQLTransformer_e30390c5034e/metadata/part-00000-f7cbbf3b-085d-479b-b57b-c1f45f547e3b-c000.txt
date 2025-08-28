@@ -1,1 +1,0 @@
-{"class":"org.apache.spark.ml.feature.SQLTransformer","timestamp":1756302949968,"sparkVersion":"4.0.0","uid":"SQLTransformer_e30390c5034e","paramMap":{"statement":"SELECT *, CASE WHEN FamilySize = 1 THEN 1 ELSE 0 END AS IsAlone FROM __THIS__"},"defaultParamMap":{}}

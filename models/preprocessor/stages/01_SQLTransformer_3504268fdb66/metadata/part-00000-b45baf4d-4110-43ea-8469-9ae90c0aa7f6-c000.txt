@@ -1,1 +1,0 @@
-{"class":"org.apache.spark.ml.feature.SQLTransformer","timestamp":1756302949706,"sparkVersion":"4.0.0","uid":"SQLTransformer_3504268fdb66","paramMap":{"statement":"SELECT *, SibSp + Parch + 1 AS FamilySize FROM __THIS__"},"defaultParamMap":{}}
