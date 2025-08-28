@@ -1,65 +1,98 @@
-=========================== MLOps Pipeline for Titanic Survival Prediction===================
+==============================================
+MLOps Pipeline for Titanic Survival Prediction
+==============================================
+
 This project implements a robust, end-to-end MLOps pipeline for a classification task using the Kaggle Titanic dataset. The pipeline is built with a modular, multi-stage architecture using DVC and leverages SparkML for distributed processing and training, MLflow for experiment tracking, and Docker for containerized deployment.
 
+---
 Technologies Used
-Data Processing & Modeling: Apache Spark (PySpark), SparkML
+---
 
-Pipeline & Data Versioning: DVC (Data Version Control)
+- Data Processing & Modeling: Apache Spark (PySpark), SparkML
+- Pipeline & Data Versioning: DVC (Data Version Control)
+- Experiment Tracking: MLflow
+- API Deployment: FastAPI, Uvicorn
+- Containerization: Docker
+- Environment Management: Conda
 
-Experiment Tracking: MLflow
+---
+Setup and Execution Guide
+---
 
-API Deployment: FastAPI, Uvicorn
+Follow these steps to set up the environment, reproduce the pipeline, and deploy the final model.
 
-Containerization: Docker
+1. Prerequisites
+   - Conda
+   - Git
+   - Docker Desktop
 
-Environment Management: Conda
+2. Clone the Repository
+   git clone https://github.com/ch24m505/AI_LAB_PROJECT.git
+   cd AI_LAB_PROJECT
 
-Setup Instructions
-Follow these steps to set up the project environment and download the necessary data.
+3. Set Up the Environment
+   # Create and activate the Conda environment
+   conda create --name ai_lab python=3.12 -y
+   conda activate ai_lab
 
-Prerequisites:
+   # Install all required packages
+   pip install -r requirements.txt
 
-Conda
+4. Place the Dataset
+   This project uses DVC to track the raw dataset, but for local evaluation, you will need to manually place the data file.
+   1. Download the Titanic dataset from Kaggle: https://www.kaggle.com/c/titanic/data
+   2. Copy 'train.csv' into the 'raw_dataset' folder in the project's root directory(AI_LAB_PROJECT).
 
-Git
-
-Docker Desktop
-
-Clone the Repository
-'git clone https://github.com/ch24m505/AI_LAB_PROJECT.git'
-'cd AI_LAB_PROJECT'
-
-Create and Activate the Conda Environment
-'conda create --name ai_lab python=3.12 -y'
-'conda activate ai_lab'
-'pip install -r requirements.txt'
-
-Pull the Data
-'dvc pull'
-
+---
 Running the Pipeline
-Reproduce the Full Pipeline
-To run all stages, use the 'dvc repro' command.
-'dvc repro'
+---
 
-View Experiment Results
-Start the MLflow Server in a dedicated terminal:
-'mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 127.0.0.1 --port 5000'
-Then, open your browser to 'http://127.0.0.1:5000'.
+The DVC pipeline requires a live MLflow server to log experiments. This requires two terminals.
 
+Step 1: Start the MLflow Server (in Terminal 1)
+   This server must remain running while you execute the pipeline.
+
+   # Navigate to the project directory (AI_LAB_PROJECT) and activate the environment
+   conda activate ai_lab
+
+   # Start the server
+   mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns
+   
+   (You can view the MLflow UI in your browser at http://127.0.0.1:5000)
+
+Step 2: Reproduce the Full Pipeline (in Terminal 2)
+   In a new terminal, run the 'dvc repro' command. This will execute all stages.
+
+   # Navigate to the project directory (AI_LAB_PROJECT) and activate the environment
+   conda activate ai_lab
+
+   # Run all pipeline stages
+   dvc repro
+
+---
 Deploy and Test the API
-Build the Docker Image:
-'docker build -t titanic-api .'
+---
 
-Run the Docker Container in a dedicated terminal:
-'docker run -p 8000:8000 titanic-api'
+Step 1: Build the Docker Image
+   docker build -t titanic-api .
 
-Test the API in a new terminal:
-'conda activate ai_lab'
-'python3 src/test_api.py'
-You can also visit the interactive docs at 'http://127.0.0.1:8000/docs'.
+Step 2: Run the Docker Container (in Terminal 1)
+   This starts the live API server.
+   docker run -p 8000:8000 titanic-api
 
+Step 3: Test the API (in Terminal 2)
+   # Navigate to the project directory (AI_LAB_PROJECT) and Activate the environment
+   conda activate ai_lab
+
+   # Run the test script
+   python3 src/test_api.py
+   
+   (You can also interact with the API by visiting the auto-generated documentation at http://127.0.0.1:8000/docs)
+
+---
 Project Structure
+---
+
 .
 ├── data/
 │   └── prepared/         (Processed train/test splits)
@@ -67,7 +100,7 @@ Project Structure
 │   ├── preprocessor/     (Fitted SparkML preprocessor)
 │   └── classifier/       (Final trained SparkML classifier)
 ├── raw_dataset/
-│   └── train.csv         (Raw data tracked by DVC)
+│   └── train.csv         (Raw data)
 ├── reports/
 │   └── drift_report.json (Drift detection output)
 ├── src/
@@ -80,5 +113,4 @@ Project Structure
 ├── .gitignore
 ├── dvc.yaml              (DVC pipeline definition)
 ├── Dockerfile            (Docker instructions for the API)
-
 └── requirements.txt      (Project dependencies)
