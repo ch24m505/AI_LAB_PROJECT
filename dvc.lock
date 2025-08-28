@@ -86,3 +86,20 @@ stages:
       hash: md5
       md5: cb7f895e4b5f6642ccb80491a0137974
       size: 90
+  detect_drift:
+    cmd: python3 src/detect_drift.py
+    deps:
+    - path: data/prepared
+      hash: md5
+      md5: 8cbd60e5f1da6a2c579546dc763693c2.dir
+      size: 41975
+      nfiles: 8
+    - path: src/detect_drift.py
+      hash: md5
+      md5: 6d2dfa7570054c5e468c07e60b869f48
+      size: 3304
+    outs:
+    - path: reports/drift_report.json
+      hash: md5
+      md5: c6ec12e538de8be11fdfff01e619741b
+      size: 479

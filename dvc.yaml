@@ -31,3 +31,10 @@ stages:
     metrics:
     - metrics/scores.json:
         cache: false
+  detect_drift:
+    cmd: python3 src/detect_drift.py
+    deps:
+    - data/prepared
+    - src/detect_drift.py
+    outs:
+    - reports/drift_report.json
